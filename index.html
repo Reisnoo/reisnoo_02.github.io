@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Synapse | 思考＆文献マッピングツール</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';</script>
+    <style>
+        :root {
+            --primary: #3B82F6; --primary-light: #EFF6FF; --bg-color: #F8FAFC; --surface: #FFFFFF;
+            --border: #E2E8F0; --text-main: #0F172A; --text-muted: #64748B; --navy-text: #1E3A8A; 
+            --danger: #EF4444; --canvas-bg: #F1F5F9; --insight-bg: #F0F9FF; --insight-border: #BAE6FD;
+        }
+
+        [data-theme="dark"] {
+            --primary: #60A5FA; --primary-light: #1E3A8A; --bg-color: #0B1120; --surface: #1E293B;
+            --border: #334155; --text-main: #F8FAFC; --text-muted: #94A3B8; --navy-text: #E2E8F0; 
+            --danger: #F87171; --canvas-bg: #0F172A; --insight-bg: #0F172A; --insight-border: #334155;
+        }
+
+        body, html { margin: 0; padding: 0; background: var(--bg-color); color: var(--text-main); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; height: 100vh; overflow: hidden; display: flex; flex-direction: column; line-height: 1.6; transition: background-color 0.3s, color 0.3s; }
+        *:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        
+        header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; z-index: 10; transition: background-color 0.3s, border-color 0.3s; }
+        .logo { font-size: 1.3rem; font-weight: 800; color: var(--primary); display: flex; align-items: center; gap: 8px;}
+        .logo::before { content: ''; display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: var(--primary); }
+
+        .header-actions { display: flex; align-items: center; gap: 15px; }
+        .theme-toggle { background: none; border: 1px solid var(--border); color: var(--text-muted); cursor: pointer; font-size: 1.2rem; padding: 6px 10px; border-radius: 8px; transition: 0.2s; display: flex; align-items: center; justify-content: center; }
+        .theme-toggle:hover { background: var(--primary-light); color: var(--primary); border-color: var(--primary); }
+
+        .account-menu { display: flex; align-items: center; gap: 12px; cursor: pointer; padding: 6px 12px; border-radius: 8px; transition: 0.2s; border: 1px solid transparent; }
+        .account-menu:hover { background: var(--bg-color); border-color: var(--border); }
+        .account-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--primary); color: white; display: flex; justify-content: center; align-items: center; font-weight: bold; font-size: 0.9rem; }
+        .account-name { font-size: 0.9rem; font-weight: bold; color: var(--text-main); }
+
+        .app-container { display: flex; flex: 1; overflow: hidden; position: relative; }
+
+        .sidebar { width: 340px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; z-index: 5; box-shadow: 2px 0 10px rgba(0,0,0,0.02); transition: background-color 0.3s, border-color 0.3s; }
+        .panel-header { padding: 20px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 15px; }
+        .panel-content { flex: 1; overflow-y: auto; padding: 15px; }
+
+        .btn { padding: 12px 15px; background: var(--primary); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%;}
+        .btn:hover { filter: brightness(1.1); box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);}
+        .btn.secondary { background: var(--surface); color: var(--text-main); border: 1px solid var(--border); box-shadow: none;}
+        .btn.secondary:hover { background: var(--bg-color); }
+
+        .node-list-item { border: 1px solid var(--border); border-radius: 12px; margin-bottom: 12px; background: var(--surface); display: flex; align-items: stretch; transition: 0.2s; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.02);}
+        .node-list-item:hover { border-color: var(--primary); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.08); transform: translateY(-1px);}
+        .node-list-item.selected { border-left: 4px solid var(--primary); background: var(--bg-color); }
+        
+        .checkbox-area { padding: 15px 10px 15px 15px; display: flex; align-items: flex-start; }
+        .checkbox-custom { width: 18px; height: 18px; cursor: pointer; margin-top: 2px; accent-color: var(--primary); }
+        
+        .node-info { flex: 1; padding: 15px 15px 15px 5px; cursor: pointer; min-width: 0; }
+        .node-title { font-weight: bold; font-size: 0.95rem; margin-bottom: 4px; line-height: 1.4; color: var(--text-main);}
+        .node-author { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px; }
+        .node-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+        .tag { font-size: 0.75rem; background: var(--primary-light); color: var(--primary); padding: 4px 10px; border-radius: 12px; white-space: nowrap; font-weight: 600;}
+        
+        .node-actions { display: flex; gap: 8px; }
+        .icon-btn { background: none; border: 1px solid var(--border); color: var(--text-muted); cursor: pointer; font-size: 0.8rem; padding: 6px 10px; border-radius: 6px; transition: 0.2s;}
+        .icon-btn:hover { color: var(--primary); border-color: var(--primary); background: var(--primary-light);}
+
+        .canvas-container { flex: 1; position: relative; background: var(--canvas-bg); transition: background-color 0.3s; }
+        canvas { width: 100%; height: 100%; display: block; cursor: grab; }
+        canvas:active { cursor: grabbing; }
+
+        .controls { position: absolute; bottom: 20px; left: 20px; background: var(--surface); padding: 20px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.08); border: 1px solid var(--border); width: 240px; display: flex; flex-direction: column; gap: 12px; opacity: 0.95; transition: 0.3s;}
+        .controls p { margin: 0; }
+
+        .right-panel { width: 380px; background: var(--surface); border-left: 1px solid var(--border); display: flex; flex-direction: column; z-index: 5; box-shadow: -2px 0 15px rgba(0,0,0,0.03); transition: 0.3s; }
+        .right-header { padding: 18px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--bg-color);}
+        
+        .right-scroll-area { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 25px;}
+        .right-fixed-footer { padding: 20px 24px; border-top: 1px solid var(--border); background: var(--surface); box-shadow: 0 -4px 15px rgba(0,0,0,0.02); z-index: 10;}
+
+        .insight-card { background: var(--insight-bg); border: 1px solid var(--insight-border); border-radius: 16px; padding: 20px; }
+        .interest-row { margin-bottom: 15px; }
+        .interest-label { display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: bold; margin-bottom: 6px; color: var(--text-main); }
+        .interest-bar-bg { width: 100%; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+        .interest-bar-fill { height: 100%; background: var(--primary); border-radius: 4px; transition: width 0.6s ease; }
+
+        .ai-suggestion { background: var(--primary-light); border: 1px solid var(--primary); border-radius: 16px; padding: 20px; }
+        .ai-suggestion h4 { margin: 0 0 10px 0; color: var(--primary); font-size: 0.95rem; display: flex; align-items: center; gap: 5px; }
+
+        .detail-title { font-size: 1.2rem; font-weight: bold; color: var(--navy-text); margin: 0 0 5px 0; line-height: 1.4; }
+        .detail-meta { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 15px;}
+        .detail-content { font-size: 0.95rem; line-height: 1.8; color: var(--text-main); background: var(--bg-color); padding: 20px; border-radius: 16px; border: 1px solid var(--border); white-space: pre-wrap;}
+
+        .citation-actions { display: flex; gap: 10px; margin-top: 15px; }
+        .citation-btn { flex: 1; background: var(--surface); border: 1px solid var(--border); color: var(--text-muted); padding: 10px; border-radius: 8px; font-weight: bold; font-size: 0.85rem; cursor: pointer; transition: 0.2s; display: flex; align-items: center; justify-content: center; gap: 5px;}
+        .citation-btn:hover { background: var(--primary-light); color: var(--primary); border-color: var(--primary); }
+
+        .action-cinii-btn { background: var(--primary-light); border: 1px solid var(--primary); color: var(--primary); padding: 14px; border-radius: 10px; font-weight: bold; cursor: pointer; transition: 0.2s; width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 0.95rem;}
+        .action-cinii-btn:hover { filter: brightness(0.95); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);}
+
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); display: flex; justify-content: center; align-items: center; z-index: 1000; transition: opacity 0.2s; }
+        .modal-overlay.hidden { opacity: 0; pointer-events: none; }
+        .modal-content { background: var(--surface); color: var(--text-main); border-radius: 20px; padding: 40px; width: 90%; max-width: 550px; box-shadow: 0 25px 50px rgba(0,0,0,0.3); max-height: 90vh; display: flex; flex-direction: column;}
+        
+        .log-container { flex: 1; overflow-y: auto; margin-top: 15px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-color); padding: 10px; max-height: 400px;}
+        .activity-list { list-style: none; padding: 0; margin: 0; }
+        .activity-item { display: flex; align-items: flex-start; gap: 12px; padding: 12px; border-bottom: 1px solid var(--border); transition: 0.2s; }
+        .activity-item:last-child { border-bottom: none; }
+        .activity-item:hover { background: var(--surface); border-radius: 8px; }
+        
+        .activity-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; justify-content: center; align-items: center; font-size: 1.1rem; flex-shrink: 0; }
+        .icon-search { background: rgba(59, 130, 246, 0.2); color: var(--primary); }
+        .icon-upload { background: rgba(16, 185, 129, 0.2); color: #10B981; }
+        .icon-add { background: rgba(245, 158, 11, 0.2); color: #F59E0B; }
+        .icon-edit { background: rgba(139, 92, 246, 0.2); color: #8B5CF6; }
+        .icon-delete { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+        .icon-copy { background: rgba(99, 102, 241, 0.2); color: #6366F1; }
+        
+        .activity-content { flex: 1; }
+        .activity-text { font-size: 0.95rem; color: var(--text-main); margin-bottom: 4px; line-height: 1.4; }
+        .activity-time { font-size: 0.75rem; color: var(--text-muted); }
+
+        input[type="text"], input[type="number"], textarea { width: 100%; padding: 12px 15px; margin-bottom: 20px; background: var(--bg-color); color: var(--text-main); border: 1px solid var(--border); border-radius: 10px; box-sizing: border-box; font-family: inherit; font-size: 1rem; transition: 0.2s;}
+        input[type="text"]:focus, input[type="number"]:focus, textarea:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px var(--primary-light); }
+        
+        /* フォームの2カラムレイアウト用 */
+        .form-row { display: flex; gap: 15px; }
+        .form-col { flex: 1; }
+
+        #toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(100px); background: #1E293B; color: white; padding: 14px 28px; border-radius: 30px; font-weight: bold; transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); z-index: 3000; font-size: 0.95rem; box-shadow: 0 10px 25px rgba(0,0,0,0.2);}
+        #toast.show { transform: translateX(-50%) translateY(0); }
+
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.4); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.8); }
+    </style>
+</head>
+<body>
+
+    <div id="toast" aria-live="polite">処理が完了しました</div>
+
+    <header>
+        <div style="display: flex; align-items: center; gap: 20px;">
+            <div class="logo">Synapse</div>
+            <div style="font-size: 0.9rem; color: var(--text-muted); font-weight: 600;">Keyword Co-occurrence Network</div>
+        </div>
+        
+        <div class="header-actions">
+            <button id="theme-toggle-btn" class="theme-toggle" onclick="toggleTheme()" aria-label="テーマ切り替え">🌙</button>
+            <div class="account-menu" onclick="openAccountModal()">
+                <div class="account-avatar">R</div>
+                <div class="account-name">Reina Ikeda ▼</div>
+            </div>
+        </div>
+    </header>
+
+    <div class="app-container">
+        <div class="sidebar">
+            <div class="panel-header">
+                <button class="btn" onclick="document.getElementById('pdf-upload').click()">📄 PDFをフル解析する</button>
+                <input type="file" id="pdf-upload" accept="application/pdf" style="display: none;" onchange="handlePDFUpload(event)">
+                <button class="btn secondary" onclick="openEditModal()">✏️ 手動で文献を追加</button>
+                
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+                    <h3 style="margin: 0; font-size: 1.05rem;">📚 文献リスト</h3>
+                    <label style="font-size: 0.85rem; cursor: pointer; color: var(--primary); font-weight: bold;">
+                        <input type="checkbox" id="select-all-cb" checked onchange="toggleSelectAll()" style="vertical-align: middle;"> 全表示
+                    </label>
+                </div>
+            </div>
+            <div class="panel-content" id="node-list"></div>
+        </div>
+
+        <div class="canvas-container">
+            <canvas id="network-canvas"></canvas>
+            <div class="controls">
+                <p style="font-size: 0.9rem; font-weight: bold; color: var(--navy-text);">ネットワーク操作</p>
+                <button class="btn secondary" style="padding: 8px; font-size: 0.85rem;" onclick="reheatPhysics()">✨ 配置を整理する</button>
+                <button class="btn secondary" style="padding: 8px; font-size: 0.85rem;" onclick="downloadMapImage()">📸 マップを画像保存</button>
+            </div>
+        </div>
+
+        <div class="right-panel">
+            <div class="right-header">
+                <h3 id="right-panel-title" style="margin: 0; font-size: 1.05rem; color: var(--navy-text);">🧠 興味の方向性 (Insight)</h3>
+                <button id="close-detail-btn" class="icon-btn hidden" onclick="showInsightPanel()">✕ 戻る</button>
+            </div>
+            
+            <div class="right-scroll-area">
+                <div id="insight-view">
+                    <div class="insight-card">
+                        <h3 style="color: var(--primary); font-size: 1rem; margin: 0 0 8px 0;">あなたの現在の関心領域</h3>
+                        <p id="insight-text-summary" style="font-size: 0.9rem; margin:0; color: var(--text-main); line-height: 1.6;"></p>
+                    </div>
+                    <div>
+                        <h4 style="margin: 0 0 15px 0; font-size: 0.95rem; color: var(--text-muted);">キーワード出現割合</h4>
+                        <div id="interest-bars-container"></div>
+                    </div>
+                    <div id="ai-suggestion-box" class="ai-suggestion hidden">
+                        <h4>💡 AIのひらめき</h4>
+                        <p id="ai-suggestion-text" style="font-size: 0.9rem; margin: 0; color: var(--text-main); line-height: 1.6;"></p>
+                    </div>
+                </div>
+
+                <div id="detail-view" class="hidden">
+                    <div class="tag" style="display:inline-block; margin-bottom:12px;">構造化要約</div>
+                    <h2 id="detail-title" class="detail-title"></h2>
+                    <div id="detail-meta" class="detail-meta"></div>
+                    <div id="detail-tags" class="node-tags" style="margin-bottom: 20px;"></div>
+                    <div id="detail-content" class="detail-content"></div>
+                    
+                    <div style="margin-top: 25px; border-top: 1px solid var(--border); padding-top: 15px;">
+                        <p style="font-size: 0.85rem; font-weight: bold; color: var(--text-muted); margin: 0 0 10px 0;">📋 参考文献（Citation）をコピー</p>
+                        <div class="citation-actions">
+                            <button class="citation-btn" onclick="copyCitation('APA')">APA 形式</button>
+                            <button class="citation-btn" onclick="copyCitation('BibTeX')">BibTeX 形式</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="keyword-view" class="hidden">
+                    <div class="tag" style="display:inline-block; margin-bottom:12px;">選択したキーワード</div>
+                    <h2 id="keyword-title" class="detail-title" style="font-size: 1.8rem;"></h2>
+                    <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 20px;">このキーワードを含む文献数: <strong id="keyword-count" style="color: var(--primary);"></strong> 件</p>
+                    <div style="font-size: 0.9rem; line-height: 1.6; color: var(--text-main); background: var(--bg-color); padding: 15px; border-radius: 12px; border: 1px solid var(--border);">
+                        マップ上でこのキーワードを中心としたネットワークが形成されています。関連文献を検索し、新たな論文を追加してノードを育てていきましょう。
+                    </div>
+                </div>
+            </div>
+
+            <div class="right-fixed-footer">
+                <button id="fixed-action-btn" class="action-cinii-btn hidden" onclick="executeFooterAction()">
+                    🔍 関連論文をCiNiiで探す
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="edit-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2 id="modal-title" style="margin-top: 0; color: var(--navy-text);">文献の編集</h2>
+            <input type="text" id="edit-title" placeholder="論文タイトル (Title)" required>
+            
+            <div class="form-row">
+                <div class="form-col">
+                    <label style="font-size: 0.8rem; color: var(--text-muted); font-weight: bold;">著者 (Author)</label>
+                    <input type="text" id="edit-author" placeholder="Ex: Ikeda, R." style="margin-bottom: 15px;">
+                </div>
+                <div class="form-col">
+                    <label style="font-size: 0.8rem; color: var(--text-muted); font-weight: bold;">発行年 (Year)</label>
+                    <input type="number" id="edit-year" placeholder="Ex: 2026" style="margin-bottom: 15px;">
+                </div>
+            </div>
+
+            <textarea id="edit-content" placeholder="【背景・目的】...&#10;【手法】...&#10;【結論・示唆】..." rows="6"></textarea>
+            <input type="text" id="edit-tags" placeholder="キーワード (カンマ区切り)">
+            
+            <div style="display: flex; gap: 15px; margin-top: 10px;">
+                <button class="btn secondary" onclick="closeEditModal()">キャンセル</button>
+                <button class="btn" onclick="saveDocument()">保存する</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="account-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 500px; height: 80vh;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <div class="account-avatar" style="width: 50px; height: 50px; font-size: 1.5rem;">R</div>
+                    <div>
+                        <h2 style="margin: 0; color: var(--navy-text); font-size: 1.3rem;">Reina Ikeda</h2>
+                        <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">プラン: Pro (Academic License)</p>
+                    </div>
+                </div>
+                <button class="icon-btn" onclick="closeAccountModal()" style="font-size: 1.5rem; border: none; padding: 0;">✕</button>
+            </div>
+            
+            <h3 style="margin: 25px 0 10px 0; font-size: 1rem; color: var(--text-main);">⏱️ アクティビティ（操作ログ）</h3>
+            
+            <div class="log-container">
+                <ul id="activity-log-list" class="activity-list"></ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. Data Structure & State (メタデータ対応)
+        // ==========================================
+        let allDocuments = [
+            { 
+                id: 1, 
+                title: "視線計測による認知負荷の定量評価とUI設計への応用", 
+                author: "Ikeda, R., & Sato, T.", year: 2025,
+                content: "【背景・目的】\nユーザーの眼球運動を追跡し、特定のUI要素における認知負荷の高さを測定・評価することを目的とした。\n\n【手法】\nアイトラッカーを用いた20名の被験者によるA/Bテストを実施。\n\n【結論・示唆】\nF型視線誘導を意識したレイアウトが最も認知負荷を下げ、タスク完了時間を平均20%短縮することが実証された。", 
+                tags: ["UI/UX", "視線計測", "デザイン", "評価"], 
+                selected: true 
+            },
+            { 
+                id: 2, 
+                title: "Jaccard係数と共起ネットワークを用いた協調フィルタリング", 
+                author: "Suzuki, K.", year: 2024,
+                content: "【背景・目的】\nタグ付けデータに基づき、アイテム間の類似度を高精度に算出する推薦アルゴリズムの構築。\n\n【手法】\nJaccard係数を用いたハイブリッドモデルの提案と、実データセットによる精度評価。\n\n【結論・示唆】\n従来の単一モデルと比較し、推薦の適合率（Precision）が15%向上した。", 
+                tags: ["アルゴリズム", "データ", "推薦システム", "評価"], 
+                selected: true 
+            },
+            { 
+                id: 3, 
+                title: "Bionic Readingが読書速度および理解度に与える影響", 
+                author: "Yamada, Y.", year: 2026,
+                content: "【背景・目的】\n単語の先頭を太字にする手法が、視線移動の効率化に寄与するかを検証。\n\n【手法】\n長文のデジタルテキストを用いた読了時間と理解度テスト。\n\n【結論・示唆】\n読書速度は向上する傾向が見られたが、用途に応じた使い分けが推奨される。", 
+                tags: ["UI/UX", "認知負荷", "デザイン"], 
+                selected: true 
+            }
+        ];
+
+        let operationLogs = [
+            { id: 2, type: "SEARCH", message: "「視線計測」に関する論文を検索しました", time: "2026-03-27 15:30" },
+            { id: 1, type: "UPLOAD", message: "PDF「Bionic_Reading_Study.pdf」を解析しました", time: "2026-03-27 14:15" }
+        ];
+
+        let activeDocs = []; let graphNodes = []; let graphEdges = []; 
+        let editingDocId = null; let viewingDocId = null; 
+        let currentSearchQuery = ""; let currentViewMode = "insight"; 
+        
+        let hoveredNodeId = null; let connectedNodeIds = new Set();
+
+        const stopWords = new Set(["the","of","and","a","to","in","is","you","that","it","he","was","for","on","are","as","with","his","they","i","at","be","this","have","from","or","one","had","by","word","but","not","what","all","were","we","when","your","can","said","there","use","an","each","which","she","do","how","their","if","will","up","other","about","out","many","then","them","these","so","some","her","would","make","like","him","into","time","has","look","two","more","write","go","see","number","no","way","could","people","my","than","first","water","been","call","who","oil","its","now","find","long","down","day","did","get","come","made","may","part","の","に","は","を","た","が","で","て","と","し","れ","さ","ある","いる","これ","それ","こと","ため","から","など","する","この","その","および","について","おける","における"]);
+        const enToJaDict = { "user": "ユーザー", "system": "システム", "design": "デザイン", "information": "情報", "data": "データ", "analysis": "分析", "learning": "学習", "model": "モデル", "study": "研究", "method": "手法", "evaluation": "評価", "algorithm": "アルゴリズム", "interaction": "インタラクション", "network": "ネットワーク", "cognitive": "認知", "visual": "視覚", "interface": "インターフェース", "performance": "パフォーマンス", "research": "研究", "result": "結果", "based": "ベース", "using": "活用", "approach": "アプローチ" };
+
+        // ==========================================
+        // ✨ Theme Toggle (Dark Mode)
+        // ==========================================
+        function toggleTheme() {
+            const html = document.documentElement;
+            const btn = document.getElementById('theme-toggle-btn');
+            if (html.getAttribute('data-theme') === 'dark') {
+                html.removeAttribute('data-theme');
+                btn.innerText = '🌙';
+            } else {
+                html.setAttribute('data-theme', 'dark');
+                btn.innerText = '☀️';
+            }
+            reheatPhysics();
+        }
+
+        // ==========================================
+        // ✨ Citation Copy (メタデータ参照)
+        // ==========================================
+        function copyCitation(format) {
+            const doc = allDocuments.find(d => d.id === viewingDocId);
+            if(!doc) return;
+            
+            const author = doc.author || "Unknown Author";
+            const year = doc.year || new Date().getFullYear();
+            const title = doc.title;
+            
+            let text = "";
+            if (format === 'APA') {
+                text = `${author} (${year}). ${title}. Journal of Synapse Interaction.`;
+            } else if (format === 'BibTeX') {
+                const key = author.split(',')[0].replace(/\s+/g, '').toLowerCase() + year;
+                text = `@article{${key},\n  title={${title}},\n  author={${author}},\n  journal={Journal of Synapse Interaction},\n  year={${year}}\n}`;
+            }
+            
+            navigator.clipboard.writeText(text).then(() => {
+                showToast(`${format}形式でクリップボードにコピーしました`);
+                addOperationLog("COPY", `「${doc.title.substring(0,10)}...」の引用(${format})をコピーしました`);
+            });
+        }
+
+        // ==========================================
+        // 2. Logging & Action Execution
+        // ==========================================
+        function addOperationLog(type, message) {
+            const now = new Date();
+            const timeStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+            operationLogs.unshift({ id: Date.now(), type, message, time: timeStr });
+            if(operationLogs.length > 50) operationLogs.pop();
+        }
+
+        function executeFooterAction() {
+            if (currentSearchQuery) {
+                addOperationLog("SEARCH", `「${currentSearchQuery}」に関連する論文を検索しました`);
+                window.open(`https://cir.nii.ac.jp/all?q=${encodeURIComponent(currentSearchQuery)}`, '_blank');
+                showToast(`CiNiiで「${currentSearchQuery}」を検索しています...`);
+            }
+        }
+
+        function openAccountModal() {
+            document.getElementById('account-modal').classList.remove('hidden');
+            const list = document.getElementById('activity-log-list');
+            if (operationLogs.length === 0) { list.innerHTML = `<li style="padding: 20px; text-align: center; color: var(--text-muted);">操作履歴がありません</li>`; return; }
+            list.innerHTML = operationLogs.map(log => {
+                let iconHtml = '';
+                if (log.type === "SEARCH") iconHtml = `<div class="activity-icon icon-search">🔍</div>`;
+                else if (log.type === "UPLOAD") iconHtml = `<div class="activity-icon icon-upload">📄</div>`;
+                else if (log.type === "ADD") iconHtml = `<div class="activity-icon icon-add">✏️</div>`;
+                else if (log.type === "EDIT") iconHtml = `<div class="activity-icon icon-edit">📝</div>`;
+                else if (log.type === "DELETE") iconHtml = `<div class="activity-icon icon-delete">🗑️</div>`;
+                else if (log.type === "COPY") iconHtml = `<div class="activity-icon icon-copy">📋</div>`;
+                return `<li class="activity-item">${iconHtml}<div class="activity-content"><div class="activity-text">${log.message}</div><div class="activity-time">${log.time}</div></div></li>`;
+            }).join('');
+        }
+        function closeAccountModal() { document.getElementById('account-modal').classList.add('hidden'); }
+
+        // ==========================================
+        // 3. ✨ PDF Metadata Parsing & Summary
+        // ==========================================
+        async function handlePDFUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            showToast("PDFのメタデータとテキストを解析しています...");
+
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+                
+                // ✨ 1. メタデータの取得
+                const metaData = await pdf.getMetadata();
+                const info = metaData.info || {};
+                
+                let extractedTitle = info.Title ? info.Title.trim() : "";
+                let extractedAuthor = info.Author ? info.Author.trim() : "Unknown";
+                let extractedYear = new Date().getFullYear();
+
+                if (info.CreationDate) {
+                    // D:YYYYMMDD... の形式から年を抽出
+                    const match = info.CreationDate.match(/D:(\d{4})/);
+                    if (match) extractedYear = parseInt(match[1]);
+                }
+
+                // ✨ 2. テキスト抽出
+                let fullText = "";
+                const totalPages = pdf.numPages;
+                for(let i=1; i<=totalPages; i++){
+                    const page = await pdf.getPage(i); 
+                    const content = await page.getTextContent();
+                    fullText += content.items.map(item => item.str).join(" ");
+                }
+
+                // ✨ 3. タイトルがない（またはUntitled）場合のヒューリスティック補完
+                if (!extractedTitle || extractedTitle.toLowerCase().includes("untitled")) {
+                    const page1 = await pdf.getPage(1);
+                    const content1 = await page1.getTextContent();
+                    // 最初の意味のある長さのテキストをタイトルとみなす
+                    const firstLine = content1.items.find(item => item.str.trim().length > 10);
+                    if (firstLine) extractedTitle = firstLine.str.trim();
+                    else extractedTitle = file.name.replace('.pdf', ''); // 最終フォールバック
+                }
+
+                const keywords = extractKeywords(fullText);
+                const mockStructuredSummary = `【背景・目的】\n本論文（全${totalPages}ページ）は、「${keywords.join('、')}」の相互関係を明らかにすることを目的としています。\n\n【手法】\n抽出データを基に、独自の評価モデル・アルゴリズムを適用した検証を実施しました。\n\n【結論・示唆】\n分析の結果、システムの実用性においてこれら要素の統合が極めて有効であることが示されました。`;
+
+                const newDoc = { 
+                    id: Date.now(), 
+                    title: extractedTitle, 
+                    author: extractedAuthor,
+                    year: extractedYear,
+                    content: mockStructuredSummary, 
+                    tags: keywords, 
+                    selected: true 
+                };
+                
+                allDocuments.push(newDoc);
+                addOperationLog("UPLOAD", `「${extractedTitle.substring(0, 15)}...」をPDF解析しました`);
+                
+                updateMapping();
+                showToast(`メタデータと結論を含む要約を抽出し、マップに追加しました`);
+            } catch (error) { 
+                console.error(error); 
+                showToast("PDFの解析に失敗しました。テキストが含まれていない可能性があります。"); 
+            }
+            event.target.value = ''; 
+        }
+
+        function extractKeywords(text) {
+            const words = text.replace(/[^\w\sぁ-んァ-ヶ亜-龠]/g, " ").split(/\s+/);
+            const kanjiKanaRegex = /^[ァ-ヶ亜-龠]{2,10}$/; const englishRegex = /^[a-zA-Z]{4,15}$/; 
+            const wordCount = {};
+            words.forEach(w => {
+                const word = w.toLowerCase(); if (stopWords.has(word)) return;
+                let finalWord = word; if(englishRegex.test(word)) { finalWord = enToJaDict[word] || word; }
+                if (kanjiKanaRegex.test(finalWord) || englishRegex.test(finalWord) || enToJaDict[word]) {
+                    const formattedWord = finalWord.charAt(0).toUpperCase() + finalWord.slice(1);
+                    wordCount[formattedWord] = (wordCount[formattedWord] || 0) + 1;
+                }
+            });
+            return Object.entries(wordCount).sort((a, b) => b[1] - a[1]).slice(0, 4).map(item => item[0]);
+        }
+
+        // ==========================================
+        // 4. UI Rendering & Panel Management
+        // ==========================================
+        function renderSidebar() {
+            const list = document.getElementById('node-list');
+            list.innerHTML = allDocuments.map(d => `
+                <div class="node-list-item ${d.selected ? 'selected' : ''}">
+                    <div class="checkbox-area">
+                        <input type="checkbox" class="checkbox-custom" ${d.selected ? 'checked' : ''} onchange="toggleDocSelection(${d.id})">
+                    </div>
+                    <div class="node-info" onclick="showDocumentDetails(${d.id})">
+                        <div class="node-title" title="${d.title}">${d.title}</div>
+                        <div class="node-author">${d.author} (${d.year})</div>
+                        <div class="node-tags">${d.tags.map(t => `<span class="tag">${t}</span>`).join('')}</div>
+                        <div class="node-actions" onclick="event.stopPropagation()">
+                            <button class="icon-btn" onclick="openEditModal(${d.id})">編集</button>
+                            <button class="icon-btn" style="color: var(--danger); border-color: rgba(239, 68, 68, 0.3);" onclick="deleteDocument(${d.id})">削除</button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            document.getElementById('select-all-cb').checked = allDocuments.every(d => d.selected);
+        }
+
+        function toggleDocSelection(id) { const doc = allDocuments.find(d => d.id === id); if(doc) { doc.selected = !doc.selected; updateMapping(); } }
+        function toggleSelectAll() { const isChecked = document.getElementById('select-all-cb').checked; allDocuments.forEach(d => d.selected = isChecked); updateMapping(); }
+
+        function hideAllRightViews() {
+            document.getElementById('insight-view').classList.add('hidden');
+            document.getElementById('detail-view').classList.add('hidden');
+            document.getElementById('keyword-view').classList.add('hidden');
+        }
+
+        function showInsightPanel() {
+            currentViewMode = "insight"; viewingDocId = null;
+            hideAllRightViews();
+            document.getElementById('insight-view').classList.remove('hidden');
+            document.getElementById('right-panel-title').innerText = "🧠 興味の方向性 (Insight)";
+            document.getElementById('close-detail-btn').classList.add('hidden');
+            updateInsightPanel(); 
+        }
+
+        function showDocumentDetails(id) {
+            const doc = allDocuments.find(d => d.id === id);
+            if(!doc) return;
+            currentViewMode = "detail"; viewingDocId = doc.id;
+            currentSearchQuery = doc.title; 
+            hideAllRightViews();
+            document.getElementById('detail-view').classList.remove('hidden');
+            document.getElementById('right-panel-title').innerText = "📄 文献プレビュー";
+            document.getElementById('close-detail-btn').classList.remove('hidden');
+
+            document.getElementById('detail-title').innerText = doc.title;
+            document.getElementById('detail-meta').innerText = `${doc.author} (${doc.year})`;
+            document.getElementById('detail-tags').innerHTML = doc.tags.map(t => `<span class="tag" style="font-size:0.8rem;">${t}</span>`).join('');
+            document.getElementById('detail-content').innerText = doc.content || "概要データがありません。";
+
+            const actionBtn = document.getElementById('fixed-action-btn');
+            actionBtn.classList.remove('hidden');
+            actionBtn.innerHTML = `🔍 この論文の関連研究をCiNiiで探す`;
+        }
+
+        function showKeywordAction(keywordNode) {
+            currentViewMode = "keyword"; viewingDocId = null;
+            currentSearchQuery = keywordNode.title;
+            hideAllRightViews();
+            document.getElementById('keyword-view').classList.remove('hidden');
+            document.getElementById('right-panel-title').innerText = "🔑 キーワードアクション";
+            document.getElementById('close-detail-btn').classList.remove('hidden');
+
+            document.getElementById('keyword-title').innerText = keywordNode.title;
+            document.getElementById('keyword-count').innerText = keywordNode.count;
+
+            const actionBtn = document.getElementById('fixed-action-btn');
+            actionBtn.classList.remove('hidden');
+            actionBtn.innerHTML = `🔍 「${keywordNode.title}」に関する論文をCiNiiで探す`;
+        }
+
+        function updateInsightPanel() {
+            if (currentViewMode !== "insight") return;
+            const summaryEl = document.getElementById('insight-text-summary');
+            const barsContainer = document.getElementById('interest-bars-container');
+            const actionBtn = document.getElementById('fixed-action-btn');
+            const aiSuggestionBox = document.getElementById('ai-suggestion-box');
+            
+            if(activeDocs.length === 0) {
+                summaryEl.innerText = "マップに表示する文献が選択されていません。";
+                barsContainer.innerHTML = ""; actionBtn.classList.add('hidden'); aiSuggestionBox.classList.add('hidden'); return;
+            }
+
+            let tagCount = {};
+            activeDocs.forEach(d => d.tags.forEach(t => tagCount[t] = (tagCount[t] || 0) + 1));
+            const sortedTags = Object.entries(tagCount).sort((a, b) => b[1] - a[1]);
+            
+            if(sortedTags.length > 0) {
+                currentSearchQuery = sortedTags[0][0]; 
+                const top2 = sortedTags[1] ? sortedTags[1][0] : '関連分野';
+                summaryEl.innerHTML = `現在 <strong>「${currentSearchQuery}」</strong> と <strong>「${top2}」</strong> の交差点に強い関心が向いています。`;
+                actionBtn.classList.remove('hidden');
+                actionBtn.innerHTML = `🔍 トップキーワード『${currentSearchQuery}』をCiNiiで探す`;
+                
+                aiSuggestionBox.classList.remove('hidden');
+                const suggestionKeyword = (currentSearchQuery === "UI/UX" || currentSearchQuery === "デザイン") ? "ヒューマンエラー" : "認知科学";
+                document.getElementById('ai-suggestion-text').innerHTML = `現在の構造から、あえて <strong>「${suggestionKeyword}」</strong> というキーワードを加えて検索すると、研究の"盲点"が見つかるかもしれません。`;
+            } else {
+                actionBtn.classList.add('hidden'); aiSuggestionBox.classList.add('hidden');
+            }
+
+            barsContainer.innerHTML = sortedTags.slice(0, 5).map(item => {
+                const percentage = Math.round((item[1] / activeDocs.length) * 100);
+                return `
+                    <div class="interest-row">
+                        <div class="interest-label"><span>${item[0]}</span><span style="color: var(--primary);">${percentage}%</span></div>
+                        <div class="interest-bar-bg"><div class="interest-bar-fill" style="width: ${percentage}%;"></div></div>
+                    </div>`;
+            }).join('');
+        }
+
+        // ==========================================
+        // 5. Algorithm: Keyword Co-occurrence
+        // ==========================================
+        let physicsAlpha = 1.0;
+
+        function updateMapping() {
+            renderSidebar();
+            activeDocs = allDocuments.filter(d => d.selected);
+            
+            let tagCounts = {}; let coOccurrence = {}; 
+            activeDocs.forEach(doc => {
+                const uniqueTags = [...new Set(doc.tags)]; 
+                for(let i=0; i<uniqueTags.length; i++) {
+                    let t1 = uniqueTags[i];
+                    tagCounts[t1] = (tagCounts[t1] || 0) + 1;
+                    for(let j=i+1; j<uniqueTags.length; j++) {
+                        let t2 = uniqueTags[j];
+                        let key = t1 < t2 ? `${t1}|${t2}` : `${t2}|${t1}`;
+                        coOccurrence[key] = (coOccurrence[key] || 0) + 1;
+                    }
+                }
+            });
+
+            const w = canvas.width || 800; const h = canvas.height || 600;
+            const oldNodesMap = new Map(graphNodes.map(n => [n.id, n]));
+            
+            graphNodes = Object.keys(tagCounts).map(tag => {
+                const count = tagCounts[tag];
+                const targetRadius = 30 + (count * 5); 
+                let old = oldNodesMap.get(tag);
+                if(old) { old.targetRadius = targetRadius; old.count = count; return old; }
+                return {
+                    id: tag, title: tag, count: count, radius: targetRadius, targetRadius: targetRadius,
+                    x: w / 2 + (Math.random() * 200 - 100), y: h / 2 + (Math.random() * 200 - 100), vx: 0, vy: 0
+                };
+            });
+
+            graphEdges = Object.keys(coOccurrence).map(key => {
+                let [t1, t2] = key.split('|');
+                let source = graphNodes.find(n => n.id === t1);
+                let target = graphNodes.find(n => n.id === t2);
+                return { source, target, weight: coOccurrence[key] };
+            });
+
+            if(currentViewMode === "insight") updateInsightPanel();
+            reheatPhysics();
+        }
+
+        function reheatPhysics() { physicsAlpha = 1.0; }
+
+        // ==========================================
+        // 6. Canvas, Physics & Focus Highlight ✨
+        // ==========================================
+        const canvas = document.getElementById('network-canvas');
+        const ctx = canvas.getContext('2d');
+        let isDragging = false; let draggedNode = null;
+        
+        function resizeCanvas() {
+            const container = document.querySelector('.canvas-container');
+            canvas.width = container.clientWidth; canvas.height = container.clientHeight;
+            reheatPhysics();
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        function simulatePhysics() {
+            if (physicsAlpha < 0.001 && !isDragging) {
+                graphNodes.forEach(n => { n.radius += (n.targetRadius - n.radius) * 0.1; });
+                return;
+            }
+
+            const K_SPRING = 0.04 * physicsAlpha;   
+            const K_REPULSION = 3500 * physicsAlpha; 
+            const DAMPING = 0.7; 
+            const CENTER_GRAVITY = 0.02 * physicsAlpha;
+
+            const w = canvas.width; const h = canvas.height;
+            const cx = w / 2; const cy = h / 2;
+
+            for (let i = 0; i < graphNodes.length; i++) {
+                graphNodes[i].radius += (graphNodes[i].targetRadius - graphNodes[i].radius) * 0.1;
+
+                for (let j = i + 1; j < graphNodes.length; j++) {
+                    const n1 = graphNodes[i]; const n2 = graphNodes[j];
+                    let dx = n1.x - n2.x; let dy = n1.y - n2.y;
+                    if (dx === 0 && dy === 0) { dx = 0.1; dy = 0.1; }
+                    const distSq = dx*dx + dy*dy;
+                    const dist = Math.sqrt(distSq);
+                    
+                    const minDist = n1.radius + n2.radius + 30; 
+                    if (dist < minDist) {
+                        const overlap = minDist - dist;
+                        const pushX = (dx / dist) * overlap * 0.5; const pushY = (dy / dist) * overlap * 0.5;
+                        n1.x += pushX; n1.y += pushY; n2.x -= pushX; n2.y -= pushY;
+                    } else if (distSq < 400000) { 
+                        const force = K_REPULSION / distSq; 
+                        n1.vx += dx * force; n1.vy += dy * force; n2.vx -= dx * force; n2.vy -= dy * force;
+                    }
+                }
+            }
+
+            graphEdges.forEach(edge => {
+                if(!edge.source || !edge.target) return;
+                const dx = edge.target.x - edge.source.x; const dy = edge.target.y - edge.source.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                if(dist === 0) return;
+                const idealDist = 180; 
+                const force = (dist - idealDist) * K_SPRING * (edge.weight * 0.5);
+                edge.source.vx += (dx / dist) * force; edge.source.vy += (dy / dist) * force; 
+                edge.target.vx -= (dx / dist) * force; edge.target.vy -= (dy / dist) * force;
+            });
+
+            graphNodes.forEach(n => {
+                if (n !== draggedNode) {
+                    n.vx += (cx - n.x) * CENTER_GRAVITY; n.vy += (cy - n.y) * CENTER_GRAVITY;
+                    const maxVel = 15 * physicsAlpha; const speed = Math.sqrt(n.vx*n.vx + n.vy*n.vy);
+                    if(speed > maxVel) { n.vx = (n.vx/speed)*maxVel; n.vy = (n.vy/speed)*maxVel; }
+
+                    n.vx *= DAMPING; n.vy *= DAMPING; n.x += n.vx; n.y += n.vy;
+                    n.x = Math.max(n.radius + 10, Math.min(w - n.radius - 10, n.x));
+                    n.y = Math.max(n.radius + 10, Math.min(h - n.radius - 10, n.y));
+                }
+            });
+            if (!isDragging) physicsAlpha *= 0.95; 
+        }
+
+        // ✨ 描画 (Highlight & Dark Mode)
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            simulatePhysics();
+
+            const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+            const nodeBgColor = isDark ? '#1E293B' : '#FFFFFF';
+            const nodeTextColor = isDark ? '#E2E8F0' : '#1E3A8A';
+            const strokeColorNormal = isDark ? '#60A5FA' : '#3B82F6';
+            const strokeColorActive = isDark ? '#93C5FD' : '#1D4ED8';
+            const edgeBaseColor = isDark ? '226, 232, 240' : '148, 163, 184';
+
+            if (hoveredNodeId) {
+                connectedNodeIds.clear();
+                connectedNodeIds.add(hoveredNodeId);
+                graphEdges.forEach(e => {
+                    if (e.source.id === hoveredNodeId) connectedNodeIds.add(e.target.id);
+                    if (e.target.id === hoveredNodeId) connectedNodeIds.add(e.source.id);
+                });
+            }
+
+            graphEdges.forEach(edge => {
+                if(!edge.source || !edge.target) return;
+                
+                let opacity = edge.weight * 0.4 + 0.1;
+                if (hoveredNodeId) {
+                    if (edge.source.id === hoveredNodeId || edge.target.id === hoveredNodeId) {
+                        opacity = 0.8; 
+                    } else {
+                        opacity = 0.05; 
+                    }
+                }
+
+                ctx.beginPath(); ctx.moveTo(edge.source.x, edge.source.y); ctx.lineTo(edge.target.x, edge.target.y);
+                ctx.strokeStyle = `rgba(${edgeBaseColor}, ${opacity})`;
+                ctx.lineWidth = hoveredNodeId && (edge.source.id === hoveredNodeId || edge.target.id === hoveredNodeId) ? edge.weight * 2 : edge.weight * 1.5; 
+                ctx.stroke();
+            });
+
+            graphNodes.forEach(n => {
+                const isHovered = (n.id === hoveredNodeId || n === draggedNode);
+                let nodeAlpha = 1.0;
+                if (hoveredNodeId && !connectedNodeIds.has(n.id)) nodeAlpha = 0.15; 
+
+                ctx.globalAlpha = nodeAlpha;
+                
+                ctx.shadowColor = isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0, 0, 0, 0.05)';
+                ctx.shadowBlur = isHovered ? 15 : 10; 
+                ctx.shadowOffsetY = isHovered ? 5 : 2;
+                
+                ctx.beginPath(); ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
+                ctx.fillStyle = nodeBgColor; ctx.fill();
+                ctx.lineWidth = isHovered ? 3.5 : 2.5; 
+                ctx.strokeStyle = isHovered ? strokeColorActive : strokeColorNormal; 
+                ctx.stroke();
+                
+                ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+                
+                ctx.font = 'bold 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+                ctx.fillStyle = nodeTextColor;
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                
+                const shortTitle = n.title.length > 10 ? n.title.substring(0, 10) + '..' : n.title;
+                ctx.fillText(shortTitle, n.x, n.y);
+
+                ctx.globalAlpha = 1.0; 
+            });
+
+            requestAnimationFrame(draw);
+        }
+
+        // --- Canvas Interactions ---
+        let dragStartX, dragStartY;
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect(); const mouseX = e.clientX - rect.left; const mouseY = e.clientY - rect.top;
+            
+            if (isDragging && draggedNode) {
+                draggedNode.x = mouseX; draggedNode.y = mouseY; draggedNode.vx = 0; draggedNode.vy = 0;
+            } else {
+                const node = graphNodes.find(n => Math.sqrt(Math.pow(n.x - mouseX, 2) + Math.pow(n.y - mouseY, 2)) < n.radius);
+                if (node) { hoveredNodeId = node.id; canvas.style.cursor = 'pointer'; } 
+                else { hoveredNodeId = null; canvas.style.cursor = 'grab'; }
+            }
+        });
+
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect(); dragStartX = e.clientX; dragStartY = e.clientY;
+            const mouseX = e.clientX - rect.left; const mouseY = e.clientY - rect.top;
+            draggedNode = graphNodes.find(n => Math.sqrt(Math.pow(n.x - mouseX, 2) + Math.pow(n.y - mouseY, 2)) < n.radius);
+            if(draggedNode) { isDragging = true; physicsAlpha = 0.5; canvas.style.cursor = 'grabbing';} 
+        });
+
+        canvas.addEventListener('mouseup', (e) => {
+            if (draggedNode && !isDragging) { } 
+            else if (draggedNode && isDragging && Math.abs(e.clientX - dragStartX) < 5 && Math.abs(e.clientY - dragStartY) < 5) {
+                 showKeywordAction(draggedNode); 
+            }
+            isDragging = false; draggedNode = null;
+            canvas.style.cursor = hoveredNodeId ? 'pointer' : 'grab';
+        });
+        
+        canvas.addEventListener('click', (e) => {
+             const rect = canvas.getBoundingClientRect(); const mouseX = e.clientX - rect.left; const mouseY = e.clientY - rect.top;
+             const clickedNode = graphNodes.find(n => Math.sqrt(Math.pow(n.x - mouseX, 2) + Math.pow(n.y - mouseY, 2)) < n.radius);
+             if(clickedNode) { showKeywordAction(clickedNode); }
+        });
+
+        // ==========================================
+        // 7. Utilities & Modal Actions
+        // ==========================================
+        function downloadMapImage() {
+            const tempCanvas = document.createElement('canvas'); tempCanvas.width = canvas.width; tempCanvas.height = canvas.height;
+            const tCtx = tempCanvas.getContext('2d');
+            const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+            tCtx.fillStyle = isDark ? '#0F172A' : '#F1F5F9'; 
+            tCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+            tCtx.drawImage(canvas, 0, 0);
+            const link = document.createElement('a'); link.download = 'synapse-map.png'; link.href = tempCanvas.toDataURL("image/png"); link.click();
+            addOperationLog("DOWNLOAD", "マップ画像をダウンロードしました");
+            showToast("マップ画像をダウンロードしました");
+        }
+
+        function openEditModal(id = null) {
+            editingDocId = id; document.getElementById('edit-modal').classList.remove('hidden');
+            document.getElementById('modal-title').innerText = id ? "文献の編集" : "手動で追加";
+            if (id) {
+                const doc = allDocuments.find(d => d.id === id);
+                document.getElementById('edit-title').value = doc.title; 
+                document.getElementById('edit-author').value = doc.author || ""; 
+                document.getElementById('edit-year').value = doc.year || ""; 
+                document.getElementById('edit-content').value = doc.content; 
+                document.getElementById('edit-tags').value = doc.tags.join(', ');
+            } else {
+                document.getElementById('edit-title').value = ''; document.getElementById('edit-author').value = ''; document.getElementById('edit-year').value = new Date().getFullYear(); document.getElementById('edit-content').value = ''; document.getElementById('edit-tags').value = '';
+            }
+        }
+        function closeEditModal() { document.getElementById('edit-modal').classList.add('hidden'); }
+        
+        function saveDocument() {
+            const title = document.getElementById('edit-title').value.trim(); 
+            const author = document.getElementById('edit-author').value.trim() || "Unknown Author"; 
+            const year = document.getElementById('edit-year').value.trim() || new Date().getFullYear(); 
+            const content = document.getElementById('edit-content').value.trim(); 
+            const tagsStr = document.getElementById('edit-tags').value.trim();
+            if(!title) { showToast("タイトルは必須です"); return; }
+            const tags = tagsStr.split(',').map(t => t.trim()).filter(t => t !== "");
+
+            if (editingDocId) {
+                const doc = allDocuments.find(d => d.id === editingDocId); 
+                doc.title = title; doc.author = author; doc.year = year; doc.content = content; doc.tags = tags; 
+                addOperationLog("EDIT", `「${title}」を編集しました`);
+                showToast("更新しました");
+            } else {
+                allDocuments.push({ id: Date.now(), title, author, year, content, tags, selected: true }); 
+                addOperationLog("ADD", `「${title}」を追加しました`);
+                showToast("追加しました");
+            }
+            closeEditModal(); updateMapping();
+        }
+        
+        function deleteDocument(id) {
+            if(confirm("削除してもよろしいですか？")) {
+                const doc = allDocuments.find(d => d.id === id);
+                allDocuments = allDocuments.filter(d => d.id !== id);
+                addOperationLog("DELETE", `「${doc.title.substring(0,10)}...」を削除しました`);
+                showInsightPanel(); updateMapping(); showToast("削除しました");
+            }
+        }
+        function showToast(msg) { const t = document.getElementById('toast'); t.innerText = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000); }
+
+        window.onload = () => { resizeCanvas(); updateMapping(); draw(); };
+    </script>
+</body>
+</html>
